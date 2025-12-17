@@ -1,0 +1,11 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-[#c4d971] font-['Noto_Sans_TC','Roboto','Helvetica','Arial',sans-serif] text-[#1f1f1f];
+}
+
+#root {
+  @apply min-h-screen;
+}
