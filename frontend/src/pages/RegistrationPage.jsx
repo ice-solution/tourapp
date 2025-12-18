@@ -61,6 +61,21 @@ const RegistrationPage = () => {
     }
   }
 
+  // 生成穩定的活動 ID 的輔助函數（與 EventRegistrationsPage 保持一致）
+  const generateEventId = (item, index) => {
+    // 優先使用 _id
+    if (item._id) return item._id
+    
+    // 如果沒有 _id，使用內容生成穩定的 ID
+    const dateStr = item.date ? new Date(item.date).toISOString().split('T')[0] : ''
+    const timeStr = item.timeLabel || (item.timeRange?.start || '')
+    const desc = item.descriptionZh || item.descriptionEn || ''
+    
+    // 使用日期、時間和描述的組合生成一個穩定的 ID
+    const contentHash = `${dateStr}-${timeStr}-${desc}`.replace(/\s+/g, '-').toLowerCase()
+    return contentHash || `event-${index}`
+  }
+
   // 將 event 的 scheduleItems 轉換為 Registration 組件需要的格式
   const convertScheduleToRegistrationFormat = () => {
     if (!event || !event.tiles) return []
@@ -70,7 +85,7 @@ const RegistrationPage = () => {
     if (!scheduleTile || !scheduleTile.scheduleItems) return []
 
     // 按日期分組
-    const groupedByDate = scheduleTile.scheduleItems.reduce((acc, item) => {
+    const groupedByDate = scheduleTile.scheduleItems.reduce((acc, item, index) => {
       let dateKey = '未指定日期'
       let dateEn = '未指定日期'
       
@@ -93,13 +108,12 @@ const RegistrationPage = () => {
         }
       }
       
-      // 創建事件 ID（如果沒有則生成一個）
-      const eventId = item._id || `event-${Date.now()}-${Math.random()}`
+      const eventId = generateEventId(item, index)
       const timeLabel = item.timeLabel || (item.timeRange?.start && item.timeRange?.end 
         ? `${item.timeRange.start} - ${item.timeRange.end}`
         : item.timeRange?.start || '')
       
-      acc[date].events.push({
+      acc[dateKey].events.push({
         id: eventId,
         title: item.descriptionZh || item.descriptionEn || 'Event',
         time: timeLabel,

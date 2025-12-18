@@ -13,7 +13,11 @@ import EventUsersPage from './pages/admin/EventUsersPage.jsx'
 import EventRegistrationsPage from './pages/admin/EventRegistrationsPage.jsx'
 import RegistrationFormConfigPage from './pages/admin/RegistrationFormConfigPage.jsx'
 import WeatherSettingsPage from './pages/admin/WeatherSettingsPage.jsx'
+import MapPinsSettingsPage from './pages/admin/MapPinsSettingsPage.jsx'
+import EventLoginPage from './pages/EventLoginPage.jsx'
+import ProtectedEventRoute from './components/ProtectedEventRoute.jsx'
 import { AdminAuthProvider } from './context/AdminAuthContext.jsx'
+import { EventUserAuthProvider } from './context/EventUserAuthContext.jsx'
 import { LanguageProvider } from './context/LanguageContext.jsx'
 
 const router = createBrowserRouter([
@@ -22,12 +26,30 @@ const router = createBrowserRouter([
     element: <HomePage />,
   },
   {
+    path: '/:eventId/login',
+    element: (
+      <EventUserAuthProvider>
+        <EventLoginPage />
+      </EventUserAuthProvider>
+    ),
+  },
+  {
     path: '/:eventId',
-    element: <EventPage />,
+    element: (
+      <EventUserAuthProvider>
+        <ProtectedEventRoute>
+          <EventPage />
+        </ProtectedEventRoute>
+      </EventUserAuthProvider>
+    ),
   },
   {
     path: '/:eventId/registration',
-    element: <RegistrationPage />,
+    element: (
+      <EventUserAuthProvider>
+        <RegistrationPage />
+      </EventUserAuthProvider>
+    ),
   },
   {
     path: '/admin',
@@ -50,6 +72,7 @@ const router = createBrowserRouter([
               { path: 'registrations', element: <EventRegistrationsPage /> },
               { path: 'registration-form-config', element: <RegistrationFormConfigPage /> },
               { path: 'weather', element: <WeatherSettingsPage /> },
+              { path: 'map-pins', element: <MapPinsSettingsPage /> },
             ],
           },
         ],

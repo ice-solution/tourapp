@@ -1,0 +1,75 @@
+{
+  "flights": [
+    {
+      "id": "A",
+      "labelEn": "Group Flight (Recommended)",
+      "labelZh": "團體航班 (推薦)",
+      "descriptionEn": "CX105 HKG-MEL / CX104 MEL-HKG",
+      "descriptionZh": "CX105 HKG-MEL / CX104 MEL-HKG"
+    },
+    {
+      "id": "B",
+      "labelEn": "Self Arrangement",
+      "labelZh": "自行安排",
+      "descriptionEn": "Flight allowance will be reimbursed",
+      "descriptionZh": "航班津貼將獲退還"
+    }
+  ],
+  "hotels": [
+    {
+      "id": "Hyatt",
+      "labelEn": "Grand Hyatt Melbourne",
+      "labelZh": "墨爾本君悅酒店"
+    },
+    {
+      "id": "Langham",
+      "labelEn": "The Langham Melbourne",
+      "labelZh": "墨爾本朗廷酒店"
+    }
+  ],
+  "roomTypes": [
+    {
+      "id": "Single",
+      "labelEn": "Single Room",
+      "labelZh": "單人房"
+    },
+    {
+      "id": "Twin",
+      "labelEn": "Twin Share",
+      "labelZh": "雙人房"
+    }
+  ],
+  "dietaryOptions": [
+    {
+      "id": "None",
+      "labelEn": "None",
+      "labelZh": "無"
+    },
+    {
+      "id": "Vegetarian",
+      "labelEn": "Vegetarian",
+      "labelZh": "素食"
+    },
+    {
+      "id": "No Beef",
+      "labelEn": "No Beef",
+      "labelZh": "不吃牛肉"
+    },
+    {
+      "id": "No Pork",
+      "labelEn": "No Pork",
+      "labelZh": "不吃豬肉"
+    },
+    {
+      "id": "Halal",
+      "labelEn": "Halal",
+      "labelZh": "清真"
+    },
+    {
+      "id": "Gluten Free",
+      "labelEn": "Gluten Free",
+      "labelZh": "無麩質"
+    }
+  ],
+  "events": []
+}

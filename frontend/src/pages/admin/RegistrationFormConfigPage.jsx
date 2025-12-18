@@ -276,11 +276,13 @@ const RegistrationFormConfigPage = () => {
               <br />
               • <code>flights</code>: 航班選項（id, labelEn, labelZh, descriptionEn, descriptionZh）
               <br />
-              • <code>hotels</code>: 酒店選項（id, labelEn, labelZh）
+              • <code>hotels</code>: 酒店選項（id, labelEn, labelZh, icon?）- icon 可選值：building, hotel, home, map-pin, star
               <br />
               • <code>roomTypes</code>: 房間類型（id, labelEn, labelZh）
               <br />
               • <code>dietaryOptions</code>: 飲食選項（id, labelEn, labelZh）
+              <br />
+              • <code>events</code>: 選修活動列表（id, labelEn, labelZh, date, time, fullLabel）- 這些是登記表單中的選修活動，與 schedule 流程分開
             </Typography>
           </Alert>
         </Stack>

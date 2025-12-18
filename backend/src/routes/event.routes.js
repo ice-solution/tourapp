@@ -12,6 +12,10 @@ import {
   deleteTile,
   updateWeatherPreference,
   updateRegistrationFormConfig,
+  getMapPins,
+  createMapPin,
+  updateMapPin,
+  deleteMapPin,
 } from '../controllers/event.controller.js'
 import {
   listEventUsers,
@@ -19,13 +23,22 @@ import {
   updateEventUser,
   resetEventUserPassword,
   deleteEventUser,
+  loginEventUser,
+  logoutEventUser,
+  getCurrentEventUser,
 } from '../controllers/eventUser.controller.js'
-import { authenticate } from '../middleware/auth.js'
+import { authenticate, authenticateEventUser } from '../middleware/auth.js'
 
 const router = Router()
 
-// 公開端點：獲取 event 資訊（不需要認證）
+// 公開端點：獲取 event 資訊和地圖 pins（不需要認證）
 router.get('/:eventId', getEvent)
+router.get('/:eventId/map-pins', getMapPins)
+
+// Event User 登入相關（公開）
+router.post('/:eventId/login', loginEventUser)
+router.post('/:eventId/logout', logoutEventUser)
+router.get('/:eventId/me', authenticateEventUser, getCurrentEventUser)
 
 // 需要認證的路由
 router.use(authenticate)
@@ -40,6 +53,8 @@ router.patch('/:eventId/tiles/reorder', reorderTiles)
 router.delete('/:eventId/tiles/:tileId', deleteTile)
 router.put('/:eventId/weather', updateWeatherPreference)
 router.put('/:eventId/registration-form-config', updateRegistrationFormConfig)
+router.post('/:eventId/map-pins', createMapPin)
+router.route('/:eventId/map-pins/:pinId').put(updateMapPin).delete(deleteMapPin)
 router.route('/:eventId/users').get(listEventUsers).post(createEventUser)
 router
   .route('/:eventId/users/:userId')

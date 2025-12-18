@@ -21,6 +21,7 @@ import CloudQueueIcon from '@mui/icons-material/CloudQueue'
 import DashboardCustomizeIcon from '@mui/icons-material/DashboardCustomize'
 import AssignmentIndIcon from '@mui/icons-material/AssignmentInd'
 import SettingsIcon from '@mui/icons-material/Settings'
+import MapIcon from '@mui/icons-material/Map'
 import Divider from '@mui/material/Divider'
 import { useAdminAuth } from '../../context/AdminAuthContext.jsx'
 
@@ -33,6 +34,7 @@ const NAV_ITEMS = [
   { label: '登記管理', subLabel: '查看與管理登記', path: 'registrations', icon: AssignmentIndIcon },
   { label: '登記表單配置', subLabel: 'JSON 配置表單選項', path: 'registration-form-config', icon: SettingsIcon },
   { label: '天氣', subLabel: '地點與 7 日預報', path: 'weather', icon: CloudQueueIcon },
+  { label: '地圖 Pin', subLabel: '管理地圖標記位置', path: 'map-pins', icon: MapIcon },
 ]
 
 const drawerWidth = 288

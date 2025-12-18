@@ -106,4 +106,94 @@ export const deleteEventUser = async (req, res) => {
   }
 }
 
+// Event User 登入
+export const loginEventUser = async (req, res) => {
+  try {
+    const { eventId, email, password } = req.body
+
+    if (!eventId || !email || !password) {
+      return failure(res, '請提供活動 ID、電郵與密碼', 422)
+    }
+
+    const event = await ensureEvent(eventId)
+    const user = await EventUser.findOne({ 
+      event: event._id, 
+      email: email.toLowerCase() 
+    })
+
+    if (!user) {
+      return failure(res, '帳號或密碼錯誤', 401)
+    }
+
+    if (user.status !== 'active') {
+      return failure(res, '帳號已被停用', 403)
+    }
+
+    const { comparePassword } = await import('../utils/password.js')
+    const isValid = await comparePassword(password, user.passwordHash)
+    if (!isValid) {
+      return failure(res, '帳號或密碼錯誤', 401)
+    }
+
+    // 更新最後登入時間
+    user.lastLoginAt = new Date()
+    await user.save()
+
+    const { signToken } = await import('../utils/token.js')
+    const token = signToken({ 
+      id: user._id.toString(), 
+      eventId: eventId,
+      type: 'eventUser' 
+    })
+
+    res.cookie('eventAccessToken', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
+    })
+
+    return success(res, { 
+      user: {
+        id: user._id,
+        email: user.email,
+        displayName: user.displayName,
+        locale: user.locale,
+      },
+      eventId: eventId,
+    })
+  } catch (error) {
+    return failure(res, error.message, 500)
+  }
+}
+
+// Event User 登出
+export const logoutEventUser = async (_req, res) => {
+  res.clearCookie('eventAccessToken')
+  return success(res, { message: '登出成功' })
+}
+
+// 獲取當前 Event User
+export const getCurrentEventUser = async (req, res) => {
+  try {
+    const event = await ensureEvent(req.params.eventId)
+    const user = await EventUser.findById(req.eventUser?.id)
+    
+    if (!user || user.event.toString() !== event._id.toString()) {
+      return failure(res, '用戶不存在', 404)
+    }
+
+    return success(res, { 
+      user: {
+        id: user._id,
+        email: user.email,
+        displayName: user.displayName,
+        locale: user.locale,
+      }
+    })
+  } catch (error) {
+    return failure(res, error.message, 500)
+  }
+}
+
 

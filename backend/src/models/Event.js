@@ -15,7 +15,7 @@ const scheduleItemSchema = new mongoose.Schema(
     descriptionZh: String,
     descriptionEn: String,
   },
-  { _id: false },
+  { _id: true }, // 啟用 _id，讓每個 schedule item 都有唯一的 MongoDB _id
 )
 
 
@@ -33,12 +33,28 @@ const tileSchema = new mongoose.Schema(
     informationData: {
       category: { type: String, default: '' }, // 資訊類別：hotel, travel, event 等
       backgroundImage: { type: String, default: '' },
+      titles: [
+        {
+          id: { type: String, default: '' }, // 標題 ID
+          titleZh: { type: String, default: '' }, // 標題（中文）
+          titleEn: { type: String, default: '' }, // 標題（英文）
+          details: [
+            {
+              subtitleZh: { type: String, default: '' },
+              subtitleEn: { type: String, default: '' },
+              contentZh: { type: String, default: '' }, // WYSIWYG 內容（中文）
+              contentEn: { type: String, default: '' }, // WYSIWYG 內容（英文）
+            },
+          ],
+        },
+      ],
+      // 向後兼容：保留舊的 items 結構
       items: [
         {
           subtitleZh: { type: String, default: '' },
           subtitleEn: { type: String, default: '' },
-          contentZh: { type: String, default: '' }, // WYSIWYG 內容（中文）
-          contentEn: { type: String, default: '' }, // WYSIWYG 內容（英文）
+          contentZh: { type: String, default: '' },
+          contentEn: { type: String, default: '' },
         },
       ],
     },
@@ -80,6 +96,18 @@ const weatherPreferenceSchema = new mongoose.Schema(
     timezone: { type: String, default: 'auto' },
   },
   { _id: false },
+)
+
+const mapPinSchema = new mongoose.Schema(
+  {
+    name: { type: String, required: true },
+    nameEn: { type: String, required: true },
+    lat: { type: Number, required: true },
+    lng: { type: Number, required: true },
+    description: { type: String, default: '' },
+    order: { type: Number, default: 0 },
+  },
+  { _id: true, timestamps: true },
 )
 
 // Dialog subitem schema (用於 travel-dialog, flight-hotel-dialog, dinner-dialog)
@@ -157,6 +185,7 @@ const eventSchema = new mongoose.Schema(
     tiles: [tileSchema],
     navigationCards: [navigationCardSchema],
     weatherPreference: weatherPreferenceSchema,
+    mapPins: [mapPinSchema],
     registrationFormConfig: {
       type: mongoose.Schema.Types.Mixed,
       default: () => ({

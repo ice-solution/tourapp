@@ -4,15 +4,19 @@ import {
   createRegistration,
   updateRegistration,
   deleteRegistration,
+  getMyRegistration,
 } from '../controllers/registration.controller.js'
-import { authenticate } from '../middleware/auth.js'
+import { authenticate, authenticateEventUser } from '../middleware/auth.js'
 
 const router = Router()
 
 // 公開端點：創建登記（不需要認證）
 router.post('/:eventId/registrations', createRegistration)
 
-// 需要認證的路由
+// Event User 端點：獲取自己的登記資料
+router.get('/:eventId/registrations/me', authenticateEventUser, getMyRegistration)
+
+// 需要管理員認證的路由
 router.use(authenticate)
 
 router.get('/:eventId/registrations', listRegistrations)

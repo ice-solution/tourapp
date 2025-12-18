@@ -3,10 +3,16 @@ import { environment } from '../config/environment.js'
 const API_BASE_URL = environment.API_BASE_URL
 
 const getAuthHeaders = () => {
-  const token = document.cookie
+  // 優先使用 eventAccessToken（前台用戶），否則使用 accessToken（管理員）
+  const eventToken = document.cookie
+    .split('; ')
+    .find((row) => row.startsWith('eventAccessToken='))
+    ?.split('=')[1]
+  const adminToken = document.cookie
     .split('; ')
     .find((row) => row.startsWith('accessToken='))
     ?.split('=')[1]
+  const token = eventToken || adminToken
   return {
     'Content-Type': 'application/json',
     ...(token && { Authorization: `Bearer ${token}` }),

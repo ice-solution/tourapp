@@ -30,11 +30,13 @@ import {
   ItineraryDialog,
   Footer,
 } from '../components'
+import InformationDialog from '../components/InformationDialog'
 import TravelGuideDialog from './TravelGuideDialog'
 import DinnerDialog from './DinnerDialog'
 import FlightHotelDialog from './FlightHotelDialog'
 import WeatherPage from './WeatherPage'
 import MapPage from './MapPage'
+import ProfilePage from './ProfilePage'
 import { api } from '../utils/api.js'
 
 const footerActions = [
@@ -54,6 +56,8 @@ const EventPage = () => {
   const [isDinnerOpen, setIsDinnerOpen] = useState(false)
   const [isTravelOpen, setIsTravelOpen] = useState(false)
   const [isFlightHotelOpen, setIsFlightHotelOpen] = useState(false)
+  const [isInformationOpen, setIsInformationOpen] = useState(false)
+  const [currentInformationTile, setCurrentInformationTile] = useState(null)
   const [bottomValue, setBottomValue] = useState(0)
 
   useEffect(() => {
@@ -84,8 +88,17 @@ const EventPage = () => {
       return
     }
 
+    if (card.type === 'information') {
+      setCurrentInformationTile(card)
+      setIsInformationOpen(true)
+      return
+    }
+
     if (card.type === 'dialog') {
-      setIsItineraryOpen(true)
+      // 只有 schedule 類型才打開 itinerary
+      if (card.scheduleItems) {
+        setIsItineraryOpen(true)
+      }
       return
     }
 
@@ -133,9 +146,10 @@ const EventPage = () => {
           primary: tile.titleZh,
           secondary: tile.titleEn,
           icon: iconMap[tile.iconKey] || EventNoteIcon,
-          type: tile.type === 'schedule' ? 'dialog' : tile.type === 'external' ? 'link' : tile.type === 'registration' ? 'registration' : 'dialog',
+          type: tile.type === 'schedule' ? 'dialog' : tile.type === 'external' ? 'link' : tile.type === 'registration' ? 'registration' : tile.type === 'information' ? 'information' : 'dialog',
           href: tile.type === 'external' ? tile.externalUrl : undefined,
           scheduleItems: tile.type === 'schedule' ? tile.scheduleItems : undefined,
+          informationData: tile.type === 'information' ? tile.informationData : undefined,
         }
       })
   }, [event])
@@ -145,6 +159,7 @@ const EventPage = () => {
     [bottomValue],
   )
 
+  const isProfilePage = bottomValue === 1
   const isWeatherPage = bottomValue === 2
   const isMapPage = bottomValue === 3
 
@@ -187,6 +202,8 @@ const EventPage = () => {
         <MapPage event={event} />
       ) : isWeatherPage ? (
         <WeatherPage event={event} />
+      ) : isProfilePage ? (
+        <ProfilePage event={event} />
       ) : (
         <Container maxWidth="sm" className="space-y-6 py-6">
           {event.banners && event.banners.length > 0 && (
@@ -266,6 +283,14 @@ const EventPage = () => {
       <DinnerDialog open={isDinnerOpen} onClose={() => setIsDinnerOpen(false)} />
       <TravelGuideDialog open={isTravelOpen} onClose={() => setIsTravelOpen(false)} />
       <FlightHotelDialog open={isFlightHotelOpen} onClose={() => setIsFlightHotelOpen(false)} />
+      <InformationDialog
+        open={isInformationOpen}
+        onClose={() => {
+          setIsInformationOpen(false)
+          setCurrentInformationTile(null)
+        }}
+        tile={currentInformationTile}
+      />
 
       <Box className="sr-only" aria-live="polite">
         {footerLabel}

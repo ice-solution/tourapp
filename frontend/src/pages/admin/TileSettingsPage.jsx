@@ -324,6 +324,7 @@ const TileSettingsPage = () => {
   const [error, setError] = useState('')
   const [addingItem, setAddingItem] = useState(null) // 追蹤正在添加項目的 tileId
   const [expandedDates, setExpandedDates] = useState({}) // 追蹤每個日期組的展開狀態
+  const [expandedTitles, setExpandedTitles] = useState({}) // 追蹤每個標題的展開狀態
   const fileInputRefs = useRef({}) // 追蹤每個 tile 的 file input
 
   useEffect(() => {
@@ -423,8 +424,20 @@ const TileSettingsPage = () => {
     const tile = tiles.find((t) => (t._id || t.id) === tileId)
     if (!tile) return
 
-    // 移除 MongoDB _id 等內部字段
+    // 移除 tile 層級的 MongoDB _id 等內部字段，但保留 scheduleItems 中的 _id
     const { _id, __v, ...tileData } = tile
+    
+    // 確保 scheduleItems 中的 _id 被保留（如果有的話）
+    if (tileData.scheduleItems && Array.isArray(tileData.scheduleItems)) {
+      tileData.scheduleItems = tileData.scheduleItems.map(item => {
+        // 保留 scheduleItem 的 _id（如果存在）
+        const { _id: itemId, ...itemData } = item
+        if (itemId) {
+          return { ...itemData, _id: itemId }
+        }
+        return itemData
+      })
+    }
 
     try {
       const response = await api.put(`/events/${eventId}/tiles/${tileId}`, tileData)
@@ -432,6 +445,35 @@ const TileSettingsPage = () => {
         // 只有當明確要求時才重新載入，避免不必要的頁面刷新
         if (reload) {
           await loadTiles()
+        } else {
+          // 即使不重新載入，也要更新本地狀態中的 _id（如果後端返回了新的 _id）
+          if (response.data?.tile) {
+            setTiles((prev) => {
+              const updated = [...prev]
+              const tileIndex = updated.findIndex((t) => (t._id || t.id) === tileId)
+              if (tileIndex !== -1 && response.data.tile.scheduleItems) {
+                // 更新 scheduleItems 的 _id
+                updated[tileIndex] = {
+                  ...updated[tileIndex],
+                  scheduleItems: response.data.tile.scheduleItems.map((savedItem, idx) => {
+                    const currentItem = updated[tileIndex].scheduleItems?.[idx]
+                    return {
+                      ...savedItem,
+                      // 保留用戶可能正在編輯的其他字段
+                      ...(currentItem && {
+                        date: currentItem.date || savedItem.date,
+                        timeRange: currentItem.timeRange || savedItem.timeRange,
+                        timeLabel: currentItem.timeLabel || savedItem.timeLabel,
+                        descriptionZh: currentItem.descriptionZh || savedItem.descriptionZh,
+                        descriptionEn: currentItem.descriptionEn || savedItem.descriptionEn,
+                      })
+                    }
+                  })
+                }
+              }
+              return updated
+            })
+          }
         }
       } else {
         // 保存失敗時不重新載入，保留用戶輸入的內容
@@ -493,38 +535,163 @@ const TileSettingsPage = () => {
     })
   }
 
-  // Information items functions
-  const addInformationItem = (tileIndex, tileId) => {
-    // 防止重複點擊
+  // Information titles and details functions
+  const addInformationTitle = (tileIndex, tileId) => {
     if (addingItem === tileId) return
     
     setAddingItem(tileId)
     setTiles((prev) => {
       const updated = [...prev]
-      const tile = { ...updated[tileIndex] } // 創建新的 tile 對象
+      const tile = { ...updated[tileIndex] }
       if (!tile.informationData) {
-        tile.informationData = { category: '', backgroundImage: '', items: [] }
+        tile.informationData = { category: '', backgroundImage: '', titles: [], items: [] }
       }
-      // 確保 informationData 是新對象
+      tile.informationData = { ...tile.informationData }
+      if (!tile.informationData.titles) {
+        tile.informationData.titles = []
+      }
+      tile.informationData.titles = [...tile.informationData.titles]
+      // 添加新標題，包含一個空的 detail
+      tile.informationData.titles.push({
+        id: `title-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        titleZh: '',
+        titleEn: '',
+        details: [],
+      })
+      const newUpdated = [...updated]
+      newUpdated[tileIndex] = tile
+      return newUpdated
+    })
+    setTimeout(() => setAddingItem(null), 500)
+  }
+
+  const updateInformationTitle = (tileIndex, titleIndex, field, value) => {
+    setTiles((prev) => {
+      const updated = [...prev]
+      const tile = { ...updated[tileIndex] }
+      tile.informationData = { ...tile.informationData }
+      if (!tile.informationData.titles) {
+        tile.informationData.titles = []
+      }
+      tile.informationData.titles = [...tile.informationData.titles]
+      tile.informationData.titles[titleIndex] = {
+        ...tile.informationData.titles[titleIndex],
+        [field]: value,
+      }
+      updated[tileIndex] = tile
+      return updated
+    })
+  }
+
+  const removeInformationTitle = (tileIndex, titleIndex) => {
+    setTiles((prev) => {
+      const updated = [...prev]
+      const tile = { ...updated[tileIndex] }
+      tile.informationData = { ...tile.informationData }
+      if (!tile.informationData.titles) {
+        tile.informationData.titles = []
+      }
+      tile.informationData.titles = tile.informationData.titles.filter((_, i) => i !== titleIndex)
+      updated[tileIndex] = tile
+      return updated
+    })
+  }
+
+  const addInformationDetail = (tileIndex, titleIndex) => {
+    setTiles((prev) => {
+      const updated = [...prev]
+      const tile = { ...updated[tileIndex] }
+      tile.informationData = { ...tile.informationData }
+      if (!tile.informationData.titles) {
+        tile.informationData.titles = []
+      }
+      tile.informationData.titles = [...tile.informationData.titles]
+      if (!tile.informationData.titles[titleIndex].details) {
+        tile.informationData.titles[titleIndex].details = []
+      }
+      tile.informationData.titles[titleIndex].details = [
+        ...tile.informationData.titles[titleIndex].details,
+        {
+          subtitleZh: '',
+          subtitleEn: '',
+          contentZh: '',
+          contentEn: '',
+        },
+      ]
+      updated[tileIndex] = tile
+      return updated
+    })
+  }
+
+  const updateInformationDetail = (tileIndex, titleIndex, detailIndex, field, value) => {
+    setTiles((prev) => {
+      const updated = [...prev]
+      const tile = { ...updated[tileIndex] }
+      tile.informationData = { ...tile.informationData }
+      if (!tile.informationData.titles) {
+        tile.informationData.titles = []
+      }
+      tile.informationData.titles = [...tile.informationData.titles]
+      if (!tile.informationData.titles[titleIndex].details) {
+        tile.informationData.titles[titleIndex].details = []
+      }
+      tile.informationData.titles[titleIndex].details = [
+        ...tile.informationData.titles[titleIndex].details,
+      ]
+      tile.informationData.titles[titleIndex].details[detailIndex] = {
+        ...tile.informationData.titles[titleIndex].details[detailIndex],
+        [field]: value,
+      }
+      updated[tileIndex] = tile
+      return updated
+    })
+  }
+
+  const removeInformationDetail = (tileIndex, titleIndex, detailIndex) => {
+    setTiles((prev) => {
+      const updated = [...prev]
+      const tile = { ...updated[tileIndex] }
+      tile.informationData = { ...tile.informationData }
+      if (!tile.informationData.titles) {
+        tile.informationData.titles = []
+      }
+      tile.informationData.titles = [...tile.informationData.titles]
+      if (!tile.informationData.titles[titleIndex].details) {
+        tile.informationData.titles[titleIndex].details = []
+      }
+      tile.informationData.titles[titleIndex].details = tile.informationData.titles[
+        titleIndex
+      ].details.filter((_, i) => i !== detailIndex)
+      updated[tileIndex] = tile
+      return updated
+    })
+  }
+
+  // 向後兼容：保留舊的 items 函數（用於遷移）
+  const addInformationItem = (tileIndex, tileId) => {
+    if (addingItem === tileId) return
+    setAddingItem(tileId)
+    setTiles((prev) => {
+      const updated = [...prev]
+      const tile = { ...updated[tileIndex] }
+      if (!tile.informationData) {
+        tile.informationData = { category: '', backgroundImage: '', titles: [], items: [] }
+      }
       tile.informationData = { ...tile.informationData }
       if (!tile.informationData.items) {
         tile.informationData.items = []
       }
-      // 創建新的 items 數組
       tile.informationData.items = [...tile.informationData.items]
-      // 只添加一個新項目
       tile.informationData.items.push({
         subtitleZh: '',
         subtitleEn: '',
         contentZh: '',
         contentEn: '',
       })
-      // 創建新的 updated 數組，替換對應的 tile
       const newUpdated = [...updated]
       newUpdated[tileIndex] = tile
       return newUpdated
     })
-    // 清除標記，允許下次添加
     setTimeout(() => setAddingItem(null), 500)
   }
 
@@ -533,6 +700,9 @@ const TileSettingsPage = () => {
       const updated = [...prev]
       const tile = { ...updated[tileIndex] }
       tile.informationData = { ...tile.informationData }
+      if (!tile.informationData.items) {
+        tile.informationData.items = []
+      }
       tile.informationData.items = [...tile.informationData.items]
       tile.informationData.items[itemIndex] = {
         ...tile.informationData.items[itemIndex],
@@ -548,6 +718,9 @@ const TileSettingsPage = () => {
       const updated = [...prev]
       const tile = { ...updated[tileIndex] }
       tile.informationData = { ...tile.informationData }
+      if (!tile.informationData.items) {
+        tile.informationData.items = []
+      }
       tile.informationData.items = tile.informationData.items.filter((_, i) => i !== itemIndex)
       updated[tileIndex] = tile
       return updated
@@ -1176,7 +1349,7 @@ const TileSettingsPage = () => {
                       <Divider />
                       <Stack direction="row" justifyContent="space-between" alignItems="center">
                         <Typography variant="subtitle2" fontWeight={600}>
-                          資訊項目（每個項目包含副標題和內容）
+                          標題列表（點擊標題可管理該標題下的詳細資料）
                         </Typography>
                         <Button
                           size="small"
@@ -1184,77 +1357,182 @@ const TileSettingsPage = () => {
                           startIcon={<AddCircleOutlineIcon />}
                           disabled={addingItem === tileId}
                           onClick={() => {
-                            addInformationItem(index, tileId)
-                            // 不立即保存，讓用戶先填寫內容，失去焦點時再保存
+                            addInformationTitle(index, tileId)
+                            setTimeout(() => saveTile(tileId, false), 100)
                           }}
                         >
-                          新增項目
+                          新增標題
                         </Button>
                       </Stack>
-                      <Stack spacing={3}>
-                        {(tile.informationData?.items || []).map((item, itemIndex) => (
-                          <Paper key={itemIndex} elevation={0} className="rounded-lg border border-[#ececec] p-4">
-                            <Stack spacing={2}>
-                              <Stack direction="row" justifyContent="space-between" alignItems="center">
-                                <Typography variant="subtitle2" fontWeight={600}>
-                                  項目 #{itemIndex + 1}
-                                </Typography>
-                                <Button
-                                  color="error"
-                                  size="small"
-                                  onClick={async () => {
-                                    removeInformationItem(index, itemIndex)
-                                    setTimeout(() => saveTile(tileId, false), 100)
-                                  }}
-                                >
-                                  移除項目
-                                </Button>
-                              </Stack>
-                              <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
-                                <TextField
-                                  label="副標題（中文）"
-                                  value={item.subtitleZh || ''}
-                                  onChange={(event) => updateInformationItem(index, itemIndex, 'subtitleZh', event.target.value)}
-                                  onBlur={() => saveTile(tileId, false)}
-                                  fullWidth
-                                />
-                                <TextField
-                                  label="副標題（英文）"
-                                  value={item.subtitleEn || ''}
-                                  onChange={(event) => updateInformationItem(index, itemIndex, 'subtitleEn', event.target.value)}
-                                  onBlur={() => saveTile(tileId, false)}
-                                  fullWidth
-                                />
-                              </Stack>
-                              <Box>
-                                <Typography variant="body2" fontWeight={600} gutterBottom>
-                                  內容（中文）
-                                </Typography>
-                                <TiptapEditor
-                                  value={item.contentZh || ''}
-                                  onChange={(value) => {
-                                    updateInformationItem(index, itemIndex, 'contentZh', value)
-                                  }}
-                                  onBlur={() => saveTile(tileId, false)}
-                                  placeholder="請輸入內容..."
-                                />
+                      <Stack spacing={2}>
+                        {(tile.informationData?.titles || []).map((title, titleIndex) => {
+                          const titleKey = `title-${tileId}-${titleIndex}`
+                          const isExpanded = expandedTitles[titleKey] !== undefined 
+                            ? expandedTitles[titleKey] 
+                            : titleIndex === 0 // 默認展開第一個
+                          
+                          return (
+                            <Paper key={title.id || titleIndex} elevation={0} className="rounded-lg border border-[#ececec]">
+                              <Box
+                                sx={{
+                                  p: 2,
+                                  cursor: 'pointer',
+                                  '&:hover': { bgcolor: '#f5f5f5' },
+                                }}
+                                onClick={() => {
+                                  setExpandedTitles(prev => ({
+                                    ...prev,
+                                    [titleKey]: !isExpanded,
+                                  }))
+                                }}
+                              >
+                                <Stack direction="row" justifyContent="space-between" alignItems="center">
+                                  <Stack direction="row" spacing={1} alignItems="center" flex={1}>
+                                    {isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                                    <Typography variant="subtitle1" fontWeight={600}>
+                                      標題 #{titleIndex + 1}: {title.titleZh || title.titleEn || '未命名標題'}
+                                    </Typography>
+                                  </Stack>
+                                  <Button
+                                    color="error"
+                                    size="small"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      removeInformationTitle(index, titleIndex)
+                                      setTimeout(() => saveTile(tileId, false), 100)
+                                    }}
+                                  >
+                                    移除標題
+                                  </Button>
+                                </Stack>
                               </Box>
-                              <Box>
-                                <Typography variant="body2" fontWeight={600} gutterBottom>
-                                  內容（英文）
-                                </Typography>
-                                <TiptapEditor
-                                  value={item.contentEn || ''}
-                                  onChange={(value) => {
-                                    updateInformationItem(index, itemIndex, 'contentEn', value)
-                                  }}
-                                  onBlur={() => saveTile(tileId, false)}
-                                  placeholder="Please enter content..."
-                                />
-                              </Box>
-                            </Stack>
-                          </Paper>
-                        ))}
+                              <Collapse in={isExpanded}>
+                                <Box sx={{ p: 3, pt: 0 }}>
+                                  <Stack spacing={3}>
+                                    <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+                                      <TextField
+                                        label="標題（中文）"
+                                        value={title.titleZh || ''}
+                                        onChange={(event) => {
+                                          updateInformationTitle(index, titleIndex, 'titleZh', event.target.value)
+                                        }}
+                                        onBlur={() => saveTile(tileId, false)}
+                                        fullWidth
+                                      />
+                                      <TextField
+                                        label="標題（英文）"
+                                        value={title.titleEn || ''}
+                                        onChange={(event) => {
+                                          updateInformationTitle(index, titleIndex, 'titleEn', event.target.value)
+                                        }}
+                                        onBlur={() => saveTile(tileId, false)}
+                                        fullWidth
+                                      />
+                                    </Stack>
+                                    <Divider />
+                                    <Stack direction="row" justifyContent="space-between" alignItems="center">
+                                      <Typography variant="body2" fontWeight={600}>
+                                        詳細資料
+                                      </Typography>
+                                      <Button
+                                        size="small"
+                                        variant="outlined"
+                                        startIcon={<AddCircleOutlineIcon />}
+                                        onClick={() => {
+                                          addInformationDetail(index, titleIndex)
+                                          setTimeout(() => saveTile(tileId, false), 100)
+                                        }}
+                                      >
+                                        新增詳細資料
+                                      </Button>
+                                    </Stack>
+                                    <Stack spacing={2}>
+                                      {(title.details || []).map((detail, detailIndex) => (
+                                        <Paper key={detailIndex} elevation={0} sx={{ p: 2, bgcolor: '#fafafa', borderRadius: 1 }}>
+                                          <Stack spacing={2}>
+                                            <Stack direction="row" justifyContent="space-between" alignItems="center">
+                                              <Typography variant="body2" fontWeight={600} color="text.secondary">
+                                                詳細資料 #{detailIndex + 1}
+                                              </Typography>
+                                              <Button
+                                                color="error"
+                                                size="small"
+                                                onClick={() => {
+                                                  removeInformationDetail(index, titleIndex, detailIndex)
+                                                  setTimeout(() => saveTile(tileId, false), 100)
+                                                }}
+                                              >
+                                                移除
+                                              </Button>
+                                            </Stack>
+                                            <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+                                              <TextField
+                                                label="副標題（中文）"
+                                                value={detail.subtitleZh || ''}
+                                                onChange={(event) => {
+                                                  updateInformationDetail(index, titleIndex, detailIndex, 'subtitleZh', event.target.value)
+                                                }}
+                                                onBlur={() => saveTile(tileId, false)}
+                                                fullWidth
+                                                size="small"
+                                              />
+                                              <TextField
+                                                label="副標題（英文）"
+                                                value={detail.subtitleEn || ''}
+                                                onChange={(event) => {
+                                                  updateInformationDetail(index, titleIndex, detailIndex, 'subtitleEn', event.target.value)
+                                                }}
+                                                onBlur={() => saveTile(tileId, false)}
+                                                fullWidth
+                                                size="small"
+                                              />
+                                            </Stack>
+                                            <Box>
+                                              <Typography variant="body2" fontWeight={600} gutterBottom>
+                                                內容（中文）
+                                              </Typography>
+                                              <TiptapEditor
+                                                value={detail.contentZh || ''}
+                                                onChange={(value) => {
+                                                  updateInformationDetail(index, titleIndex, detailIndex, 'contentZh', value)
+                                                }}
+                                                onBlur={() => saveTile(tileId, false)}
+                                                placeholder="請輸入內容..."
+                                              />
+                                            </Box>
+                                            <Box>
+                                              <Typography variant="body2" fontWeight={600} gutterBottom>
+                                                內容（英文）
+                                              </Typography>
+                                              <TiptapEditor
+                                                value={detail.contentEn || ''}
+                                                onChange={(value) => {
+                                                  updateInformationDetail(index, titleIndex, detailIndex, 'contentEn', value)
+                                                }}
+                                                onBlur={() => saveTile(tileId, false)}
+                                                placeholder="Please enter content..."
+                                              />
+                                            </Box>
+                                          </Stack>
+                                        </Paper>
+                                      ))}
+                                      {(!title.details || title.details.length === 0) && (
+                                        <Alert severity="info">
+                                          此標題下暫無詳細資料，請點擊「新增詳細資料」按鈕添加
+                                        </Alert>
+                                      )}
+                                    </Stack>
+                                  </Stack>
+                                </Box>
+                              </Collapse>
+                            </Paper>
+                          )
+                        })}
+                        {(!tile.informationData?.titles || tile.informationData.titles.length === 0) && (
+                          <Alert severity="info">
+                            暫無標題，請點擊「新增標題」按鈕添加標題
+                          </Alert>
+                        )}
                       </Stack>
                     </Stack>
                   )}

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useParams } from 'react-router-dom'
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
 import Box from '@mui/material/Box'
 import Container from '@mui/material/Container'
@@ -7,9 +8,11 @@ import Stack from '@mui/material/Stack'
 import Typography from '@mui/material/Typography'
 import ButtonBase from '@mui/material/ButtonBase'
 import Divider from '@mui/material/Divider'
+import CircularProgress from '@mui/material/CircularProgress'
 import LocationOnIcon from '@mui/icons-material/LocationOn'
 import 'leaflet/dist/leaflet.css'
 import L from 'leaflet'
+import { api } from '../utils/api.js'
 
 // 修復 Leaflet 預設圖標問題
 delete L.Icon.Default.prototype._getIconUrl
@@ -19,49 +22,6 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 })
 
-// 地點數據
-const locations = [
-  {
-    id: 1,
-    name: '墨爾本中央商務區',
-    nameEn: 'Melbourne CBD',
-    lat: -37.8136,
-    lng: 144.9631,
-    description: '墨爾本市中心商業區',
-  },
-  {
-    id: 2,
-    name: '聯邦廣場',
-    nameEn: 'Federation Square',
-    lat: -37.8183,
-    lng: 144.9631,
-    description: '文化與藝術中心',
-  },
-  {
-    id: 3,
-    name: '皇家植物園',
-    nameEn: 'Royal Botanic Gardens',
-    lat: -37.8304,
-    lng: 144.9796,
-    description: '美麗的植物園',
-  },
-  {
-    id: 4,
-    name: '聖基爾達海灘',
-    nameEn: 'St Kilda Beach',
-    lat: -37.8676,
-    lng: 144.978,
-    description: '熱門海灘景點',
-  },
-  {
-    id: 5,
-    name: '墨爾本博物館',
-    nameEn: 'Melbourne Museum',
-    lat: -37.8033,
-    lng: 144.9717,
-    description: '歷史與文化博物館',
-  },
-]
 
 // 地圖控制組件，用於移動地圖視圖
 const MapController = ({ center, zoom }) => {
@@ -81,12 +41,62 @@ const MapController = ({ center, zoom }) => {
 
 
 const MapPage = () => {
-  const [selectedLocation, setSelectedLocation] = useState(locations[0])
-  const [mapCenter, setMapCenter] = useState([locations[0].lat, locations[0].lng])
+  const { eventId } = useParams()
+  const [locations, setLocations] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [selectedLocation, setSelectedLocation] = useState(null)
+  const [mapCenter, setMapCenter] = useState([-37.8136, 144.9631]) // 默認墨爾本
+
+  useEffect(() => {
+    loadMapPins()
+  }, [eventId])
+
+  const loadMapPins = async () => {
+    try {
+      setLoading(true)
+      const response = await api.get(`/events/${eventId}/map-pins`)
+      if (response.success && response.data.mapPins) {
+        const pins = response.data.mapPins
+        setLocations(pins)
+        if (pins.length > 0) {
+          setSelectedLocation(pins[0])
+          // 計算所有 pins 的中心點
+          const avgLat = pins.reduce((sum, pin) => sum + pin.lat, 0) / pins.length
+          const avgLng = pins.reduce((sum, pin) => sum + pin.lng, 0) / pins.length
+          setMapCenter([avgLat, avgLng])
+        }
+      } else {
+        setLocations([])
+      }
+    } catch (error) {
+      console.error('Failed to load map pins:', error)
+      setLocations([])
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const handleLocationClick = (location) => {
     setSelectedLocation(location)
     setMapCenter([location.lat, location.lng])
+  }
+
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 'calc(100vh - 64px - 80px)' }}>
+        <CircularProgress />
+      </Box>
+    )
+  }
+
+  if (locations.length === 0) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 'calc(100vh - 64px - 80px)' }}>
+        <Typography variant="h6" color="text.secondary">
+          暫無地圖標記
+        </Typography>
+      </Box>
+    )
   }
 
   return (
@@ -95,9 +105,10 @@ const MapPage = () => {
       <Box sx={{ flex: 1, position: 'relative', zIndex: 0, minHeight: 0 }}>
         <MapContainer
           center={mapCenter}
-          zoom={15}
+          zoom={locations.length > 1 ? 12 : 15}
           style={{ height: '100%', width: '100%' }}
           scrollWheelZoom={true}
+          key={locations.length} // 當 locations 變化時重新渲染地圖
         >
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -105,7 +116,7 @@ const MapPage = () => {
           />
           {locations.map((location) => (
             <Marker
-              key={location.id}
+              key={location._id || location.id}
               position={[location.lat, location.lng]}
               eventHandlers={{
                 click: () => handleLocationClick(location),
@@ -116,10 +127,15 @@ const MapPage = () => {
                   {location.name}
                 </Typography>
                 <Typography variant="body2">{location.nameEn}</Typography>
+                {location.description && (
+                  <Typography variant="caption" color="text.secondary">
+                    {location.description}
+                  </Typography>
+                )}
               </Popup>
             </Marker>
           ))}
-          <MapController center={mapCenter} zoom={15} />
+          <MapController center={mapCenter} zoom={locations.length > 1 ? 12 : 15} />
         </MapContainer>
       </Box>
 
@@ -148,7 +164,7 @@ const MapPage = () => {
         <Box sx={{ flex: 1, overflowY: 'auto', px: 2, pb: 2 }}>
           <Stack spacing={1}>
             {locations.map((location, index) => (
-              <Box key={location.id}>
+              <Box key={location._id || location.id || index}>
                 <ButtonBase
                   onClick={() => handleLocationClick(location)}
                   sx={{
@@ -166,8 +182,8 @@ const MapPage = () => {
                       width: '100%',
                       p: 2.5,
                       borderRadius: '16px',
-                      backgroundColor: selectedLocation.id === location.id ? '#f5f5f5' : 'white',
-                      border: selectedLocation.id === location.id ? '2px solid #c9503d' : '1px solid rgba(0, 0, 0, 0.06)',
+                      backgroundColor: (selectedLocation?._id === location._id) || (selectedLocation?.id === location.id) ? '#f5f5f5' : 'white',
+                      border: (selectedLocation?._id === location._id) || (selectedLocation?.id === location.id) ? '2px solid #c9503d' : '1px solid rgba(0, 0, 0, 0.06)',
                       transition: 'all 0.2s',
                     }}
                   >
@@ -180,8 +196,8 @@ const MapPage = () => {
                           width: 40,
                           height: 40,
                           borderRadius: '50%',
-                          backgroundColor: selectedLocation.id === location.id ? '#c9503d' : '#f0f0f0',
-                          color: selectedLocation.id === location.id ? 'white' : '#666',
+                          backgroundColor: selectedLocation?._id === location._id || selectedLocation?.id === location.id ? '#c9503d' : '#f0f0f0',
+                          color: selectedLocation?._id === location._id || selectedLocation?.id === location.id ? 'white' : '#666',
                         }}
                       >
                         <LocationOnIcon />
@@ -193,9 +209,11 @@ const MapPage = () => {
                         <Typography variant="body2" color="text.secondary">
                           {location.nameEn}
                         </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {location.description}
-                        </Typography>
+                        {location.description && (
+                          <Typography variant="caption" color="text.secondary">
+                            {location.description}
+                          </Typography>
+                        )}
                       </Stack>
                     </Stack>
                   </Paper>

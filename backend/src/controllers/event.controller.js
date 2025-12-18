@@ -191,21 +191,28 @@ export const reorderTiles = async (req, res) => {
 }
 
 export const deleteTile = async (req, res) => {
-  const event = await Event.findOne({ eventId: req.params.eventId })
-  if (!event) {
-    return failure(res, 'Event 不存在', 404)
+  try {
+    const event = await Event.findOne({ eventId: req.params.eventId })
+    if (!event) {
+      return failure(res, 'Event 不存在', 404)
+    }
+
+    const tile = event.tiles.id(req.params.tileId)
+    if (!tile) {
+      return failure(res, 'Tile 不存在', 404)
+    }
+
+    // 使用 pull 方法移除子文檔（最可靠的方法）
+    event.tiles.pull(req.params.tileId)
+    
+    event.updatedBy = req.admin?._id
+    await event.save()
+
+    return success(res, { tiles: event.tiles })
+  } catch (error) {
+    console.error('Delete tile error:', error)
+    return failure(res, error.message || '刪除 tile 失敗', 500)
   }
-
-  const tile = event.tiles.id(req.params.tileId)
-  if (!tile) {
-    return failure(res, 'Tile 不存在', 404)
-  }
-
-  tile.remove()
-  event.updatedBy = req.admin?._id
-  await event.save()
-
-  return success(res, { tiles: event.tiles })
 }
 
 export const updateWeatherPreference = async (req, res) => {
@@ -237,6 +244,98 @@ export const updateRegistrationFormConfig = async (req, res) => {
   await event.save()
 
   return success(res, { registrationFormConfig: event.registrationFormConfig })
+}
+
+// 地圖 Pin 管理
+export const getMapPins = async (req, res) => {
+  const event = await Event.findOne({ eventId: req.params.eventId })
+  if (!event) {
+    return failure(res, 'Event 不存在', 404)
+  }
+  return success(res, { mapPins: event.mapPins || [] })
+}
+
+export const createMapPin = async (req, res) => {
+  const { name, nameEn, lat, lng, description } = req.body
+  if (!name || !nameEn || lat === undefined || lng === undefined) {
+    return failure(res, '請提供名稱與座標', 422)
+  }
+
+  const event = await Event.findOne({ eventId: req.params.eventId })
+  if (!event) {
+    return failure(res, 'Event 不存在', 404)
+  }
+
+  if (!event.mapPins) {
+    event.mapPins = []
+  }
+
+  const maxOrder = event.mapPins.length > 0 
+    ? Math.max(...event.mapPins.map(pin => pin.order || 0))
+    : -1
+
+  const newPin = {
+    name,
+    nameEn,
+    lat,
+    lng,
+    description: description || '',
+    order: maxOrder + 1,
+  }
+
+  event.mapPins.push(newPin)
+  event.updatedBy = req.admin?._id
+  await event.save()
+
+  const createdPin = event.mapPins[event.mapPins.length - 1]
+  return success(res, { mapPin: createdPin }, 201)
+}
+
+export const updateMapPin = async (req, res) => {
+  const { name, nameEn, lat, lng, description, order } = req.body
+  const { pinId } = req.params
+
+  const event = await Event.findOne({ eventId: req.params.eventId })
+  if (!event) {
+    return failure(res, 'Event 不存在', 404)
+  }
+
+  const pin = event.mapPins.id(pinId)
+  if (!pin) {
+    return failure(res, 'Map Pin 不存在', 404)
+  }
+
+  if (name !== undefined) pin.name = name
+  if (nameEn !== undefined) pin.nameEn = nameEn
+  if (lat !== undefined) pin.lat = lat
+  if (lng !== undefined) pin.lng = lng
+  if (description !== undefined) pin.description = description
+  if (order !== undefined) pin.order = order
+
+  event.updatedBy = req.admin?._id
+  await event.save()
+
+  return success(res, { mapPin: pin })
+}
+
+export const deleteMapPin = async (req, res) => {
+  const { pinId } = req.params
+
+  const event = await Event.findOne({ eventId: req.params.eventId })
+  if (!event) {
+    return failure(res, 'Event 不存在', 404)
+  }
+
+  const pin = event.mapPins.id(pinId)
+  if (!pin) {
+    return failure(res, 'Map Pin 不存在', 404)
+  }
+
+  pin.remove()
+  event.updatedBy = req.admin?._id
+  await event.save()
+
+  return success(res, { mapPins: event.mapPins })
 }
 
 

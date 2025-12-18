@@ -50,4 +50,38 @@ export const requireAdminOrEditor = (req, res, next) => {
   next()
 }
 
+// Event User 認證中間件
+export const authenticateEventUser = async (req, res, next) => {
+  try {
+    const token = req.cookies?.eventAccessToken || req.headers.authorization?.split(' ')[1]
+
+    if (!token) {
+      return failure(res, 'Unauthorized', 401)
+    }
+
+    const decoded = verifyToken(token)
+    
+    if (decoded.type !== 'eventUser') {
+      return failure(res, 'Unauthorized', 401)
+    }
+
+    const { EventUser } = await import('../models/EventUser.js')
+    const user = await EventUser.findById(decoded.id)
+
+    if (!user || user.status !== 'active') {
+      return failure(res, 'Unauthorized', 401)
+    }
+
+    req.eventUser = {
+      id: user._id.toString(),
+      email: user.email,
+      displayName: user.displayName,
+      eventId: decoded.eventId,
+    }
+    next()
+  } catch (error) {
+    return failure(res, 'Unauthorized', 401)
+  }
+}
+
 

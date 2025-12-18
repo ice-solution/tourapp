@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ChevronLeft, Check, AlertCircle, Upload, User, Users, Calendar, Plane, Building } from 'lucide-react';
+import { ChevronLeft, Check, AlertCircle, Upload, User, Users, Calendar, Plane, Building, Loader2, Hotel, Home, MapPin, Star } from 'lucide-react';
 import { Guest, CMSSettings, ScheduleEvent, ScheduleDay } from '../types';
 
 interface RegistrationProps {
@@ -10,9 +10,17 @@ interface RegistrationProps {
   schedule?: ScheduleDay[];
   formConfig?: {
     flights?: Array<{ id: string; labelEn: string; labelZh: string; descriptionEn?: string; descriptionZh?: string }>;
-    hotels?: Array<{ id: string; labelEn: string; labelZh: string }>;
+    hotels?: Array<{ id: string; labelEn: string; labelZh: string; icon?: string }>;
     roomTypes?: Array<{ id: string; labelEn: string; labelZh: string }>;
     dietaryOptions?: Array<{ id: string; labelEn: string; labelZh: string }>;
+    events?: Array<{ 
+      id: string; 
+      labelEn: string; 
+      labelZh: string; 
+      date?: string; 
+      time?: string; 
+      fullLabel?: string;
+    }>;
   };
 }
 
@@ -30,6 +38,7 @@ export const Registration: React.FC<RegistrationProps> = ({ onBack, onComplete, 
   const [currentStep, setCurrentStep] = useState(1);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [toastMessage, setToastMessage] = useState<{type: 'success'|'error', msg: string} | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState({
@@ -44,7 +53,8 @@ export const Registration: React.FC<RegistrationProps> = ({ onBack, onComplete, 
     specialRemarks: ""
   });
 
-  const selectableEvents = schedule.flatMap(day => day.events).filter(e => e.requiresRegistration);
+  // 選修活動從 formConfig.events 獲取，不是從 schedule
+  const selectableEvents = formConfig?.events || [];
 
   const showToast = (type: 'success' | 'error', msg: string) => {
       setToastMessage({ type, msg });
@@ -53,12 +63,57 @@ export const Registration: React.FC<RegistrationProps> = ({ onBack, onComplete, 
 
   const handlePassportUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
       if (e.target.files && e.target.files[0]) {
+          const file = e.target.files[0];
+          const maxSize = 5 * 1024 * 1024; // 5MB
+          
+          if (file.size > maxSize) {
+              showToast('error', 'File size too large. Please upload an image smaller than 5MB. (檔案太大，請上傳小於 5MB 的圖片)');
+              return;
+          }
+
           const reader = new FileReader();
           reader.onload = (ev) => {
-              setFormData({...formData, passportUrl: ev.target?.result as string});
-              showToast('success', 'Passport uploaded successfully');
+              const result = ev.target?.result as string;
+              
+              // 壓縮圖片
+              const img = new Image();
+              img.onload = () => {
+                  const canvas = document.createElement('canvas');
+                  const maxWidth = 1920;
+                  const maxHeight = 1080;
+                  let width = img.width;
+                  let height = img.height;
+
+                  // 計算縮放比例
+                  if (width > height) {
+                      if (width > maxWidth) {
+                          height = (height * maxWidth) / width;
+                          width = maxWidth;
+                      }
+                  } else {
+                      if (height > maxHeight) {
+                          width = (width * maxHeight) / height;
+                          height = maxHeight;
+                      }
+                  }
+
+                  canvas.width = width;
+                  canvas.height = height;
+                  const ctx = canvas.getContext('2d');
+                  if (ctx) {
+                      ctx.drawImage(img, 0, 0, width, height);
+                      // 使用較低的質量來減少文件大小
+                      const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.8);
+                      setFormData({...formData, passportUrl: compressedDataUrl});
+                      showToast('success', 'Passport uploaded successfully (護照上傳成功)');
+                  }
+              };
+              img.onerror = () => {
+                  showToast('error', 'Failed to load image. Please try again. (圖片載入失敗，請重試)');
+              };
+              img.src = result;
           };
-          reader.readAsDataURL(e.target.files[0]);
+          reader.readAsDataURL(file);
       }
   };
 
@@ -107,12 +162,19 @@ export const Registration: React.FC<RegistrationProps> = ({ onBack, onComplete, 
   };
 
   const handleSubmit = async () => {
+    if (isSubmitting) return; // 防止重複提交
+    
     try {
+      setIsSubmitting(true);
+      
       // 先同步到 CMS
       await syncToCMS({
         nameEn: `${formData.firstNameEn} ${formData.lastNameEn}`,
         nameZh: formData.nameZh,
         email: formData.email,
+        mobile: formData.mobile,
+        dob: formData.dob,
+        passportNumber: formData.passportNumber,
         passportUrl: formData.passportUrl,
         flight: formData.flightOption === 'A' ? 'Group Flight' : 'Self',
         hotel: formData.hotelOption,
@@ -120,16 +182,18 @@ export const Registration: React.FC<RegistrationProps> = ({ onBack, onComplete, 
         roommate: formData.roommateName,
         selectedEventIds: formData.selectedEventIds,
         dietary: formData.dietaryRestrictions,
+        specialRemarks: formData.specialRemarks,
         status: 'Registered'
       });
       
-      showToast('success', "Registration Successful!");
+      showToast('success', "Registration Successful! (登記成功！)");
       
       setTimeout(() => {
         onComplete();
       }, 1500);
     } catch (error) {
-      showToast('error', "Registration failed. Please try again.");
+      setIsSubmitting(false); // 失敗時允許重試
+      showToast('error', "Registration failed. Please try again. (登記失敗，請重試)");
       console.error('Registration error:', error);
     }
   };
@@ -264,22 +328,45 @@ export const Registration: React.FC<RegistrationProps> = ({ onBack, onComplete, 
                 <div className="space-y-6 animate-fade-in">
                     <div className="space-y-2">
                         <label className="block text-sm font-bold text-gray-700 mb-2">Select Hotel <span className="text-gray-500 font-normal">(選擇酒店)</span></label>
-                        {hotels.map((hotel) => (
-                            <div 
-                                key={hotel.id}
-                                className="p-4 border rounded-xl cursor-pointer hover:border-red-500 transition-colors relative overflow-hidden mb-2" 
-                                onClick={() => setFormData({...formData, hotelOption: hotel.id})}
-                            >
-                                <div className={`absolute inset-0 bg-red-50 transition-opacity ${formData.hotelOption === hotel.id ? 'opacity-100' : 'opacity-0'}`}></div>
-                                <div className="relative z-10">
-                                    <div className="font-bold text-gray-800 flex items-center">
-                                        <Building size={16} className="mr-2"/> 
-                                        {hotel.labelEn} <span className="text-gray-500 font-normal ml-2">({hotel.labelZh})</span>
+                        {hotels.map((hotel) => {
+                            // 根據 icon 字段選擇對應的 icon，默認使用 Building
+                            const getHotelIcon = () => {
+                                const iconName = hotel.icon?.toLowerCase() || 'building';
+                                const iconProps = { size: 16, className: "mr-2" };
+                                switch (iconName) {
+                                    case 'hotel':
+                                        return <Hotel {...iconProps} />;
+                                    case 'home':
+                                        return <Home {...iconProps} />;
+                                    case 'mappin':
+                                    case 'map-pin':
+                                    case 'location':
+                                        return <MapPin {...iconProps} />;
+                                    case 'star':
+                                        return <Star {...iconProps} />;
+                                    case 'building':
+                                    default:
+                                        return <Building {...iconProps} />;
+                                }
+                            };
+                            
+                            return (
+                                <div 
+                                    key={hotel.id}
+                                    className="p-4 border rounded-xl cursor-pointer hover:border-red-500 transition-colors relative overflow-hidden mb-2" 
+                                    onClick={() => setFormData({...formData, hotelOption: hotel.id})}
+                                >
+                                    <div className={`absolute inset-0 bg-red-50 transition-opacity ${formData.hotelOption === hotel.id ? 'opacity-100' : 'opacity-0'}`}></div>
+                                    <div className="relative z-10">
+                                        <div className="font-bold text-gray-800 flex items-center">
+                                            {getHotelIcon()}
+                                            {hotel.labelEn} <span className="text-gray-500 font-normal ml-2">({hotel.labelZh})</span>
+                                        </div>
+                                        {formData.hotelOption === hotel.id && <Check className="text-red-500 absolute top-4 right-4" size={20}/>}
                                     </div>
-                                    {formData.hotelOption === hotel.id && <Check className="text-red-500 absolute top-4 right-4" size={20}/>}
                                 </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
 
                     <div className="border-t pt-4"></div>
@@ -317,14 +404,17 @@ export const Registration: React.FC<RegistrationProps> = ({ onBack, onComplete, 
                 </div>
             );
         case 5:
+            // 從 formConfig.events 獲取選修活動列表（不是從 schedule）
+            const optionalEvents = formConfig?.events || [];
+            
             return (
                 <div className="space-y-4 animate-fade-in">
                     <p className="text-sm text-gray-600 mb-2">Select the optional activities you wish to attend. <span className="text-gray-500">(選擇您希望參加的選修活動)</span></p>
                     
-                    {selectableEvents.length === 0 ? (
+                    {optionalEvents.length === 0 ? (
                         <div className="p-6 text-center text-gray-400 bg-gray-50 rounded-xl">No optional events available for registration at this time. (目前沒有可登記的選修活動)</div>
                     ) : (
-                        selectableEvents.map(evt => {
+                        optionalEvents.map(evt => {
                             const isSelected = formData.selectedEventIds.includes(evt.id);
                             return (
                                 <div 
@@ -334,11 +424,18 @@ export const Registration: React.FC<RegistrationProps> = ({ onBack, onComplete, 
                                 >
                                     <div className="flex justify-between items-start">
                                         <div className="flex-1">
-                                            <div className="font-bold text-gray-800 text-sm mb-1">{evt.title}</div>
-                                            <div className="text-xs text-gray-500 flex items-center">
-                                                <Calendar size={12} className="mr-1"/> 
-                                                {schedule.find(d => d.events.includes(evt))?.dateEn} • {evt.time}
+                                            <div className="font-bold text-gray-800 text-sm mb-1">
+                                                {evt.labelZh || evt.labelEn || 'Event'}
+                                                {evt.labelEn && evt.labelZh !== evt.labelEn && (
+                                                    <span className="text-gray-500 font-normal ml-2">({evt.labelEn})</span>
+                                                )}
                                             </div>
+                                            {(evt.date || evt.time) && (
+                                                <div className="text-xs text-gray-500 flex items-center">
+                                                    <Calendar size={12} className="mr-1"/> 
+                                                    {evt.date || ''} {evt.time ? `• ${evt.time}` : ''}
+                                                </div>
+                                            )}
                                         </div>
                                         <div className={`w-5 h-5 rounded border flex items-center justify-center ${isSelected ? 'bg-red-500 border-red-500' : 'border-gray-300'}`}>
                                             {isSelected && <Check size={14} className="text-white" />}
@@ -386,22 +483,110 @@ export const Registration: React.FC<RegistrationProps> = ({ onBack, onComplete, 
                 </div>
             );
         case 7:
+            const selectedFlight = formConfig?.flights?.find(f => f.id === formData.flightOption) || 
+                (formData.flightOption === 'A' ? { labelEn: 'Group Flight', labelZh: '團體航班' } : { labelEn: 'Self Arrangement', labelZh: '自行安排' });
+            const selectedHotel = formConfig?.hotels?.find(h => h.id === formData.hotelOption);
+            const selectedDietary = formConfig?.dietaryOptions?.find(d => d.id === formData.dietaryRestrictions);
+            
+            // 獲取選中的活動完整信息（從 formConfig.events）
+            const selectedEvents = formData.selectedEventIds.map(id => {
+                const configEvent = formConfig?.events?.find(e => e.id === id);
+                if (configEvent) {
+                    return {
+                        id: id,
+                        fullLabel: configEvent.fullLabel || `${configEvent.date || ''} ${configEvent.time || ''} - ${configEvent.labelZh || configEvent.labelEn || id}${configEvent.labelEn && configEvent.labelZh !== configEvent.labelEn ? ` (${configEvent.labelEn})` : ''}`,
+                        title: configEvent.labelZh || configEvent.labelEn || id,
+                        titleEn: configEvent.labelEn || configEvent.labelZh || id,
+                        date: configEvent.date || '',
+                        time: configEvent.time || '',
+                    };
+                }
+                
+                // 如果找不到，顯示 ID
+                return {
+                    id: id,
+                    fullLabel: `活動 ID: ${id}`,
+                    title: id,
+                    titleEn: id,
+                    date: '',
+                    time: '',
+                };
+            });
+
             return (
                 <div className="space-y-6 animate-fade-in">
+                    {/* 個人資料 Personal Information */}
                     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
-                        <div className="bg-gray-50 px-4 py-3 border-b border-gray-200 font-bold text-gray-700 flex items-center"><Check size={16} className="mr-2 text-green-600"/> Summary <span className="text-gray-500 font-normal ml-2">(摘要)</span></div>
+                        <div className="bg-gray-50 px-4 py-3 border-b border-gray-200 font-bold text-gray-700 flex items-center">
+                            <User size={16} className="mr-2 text-blue-600"/> Personal Information <span className="text-gray-500 font-normal ml-2">(個人資料)</span>
+                        </div>
                         <div className="p-4 space-y-3 text-sm">
                             <div className="flex justify-between border-b border-gray-50 pb-2">
-                                <span className="text-gray-500">Name (姓名)</span>
-                                <span className="font-bold text-gray-800">{formData.lastNameEn}, {formData.firstNameEn}</span>
+                                <span className="text-gray-500">Name (英文姓名)</span>
+                                <span className="font-bold text-gray-800 text-right">{formData.lastNameEn}, {formData.firstNameEn}</span>
                             </div>
-                             <div className="flex justify-between border-b border-gray-50 pb-2">
+                            {formData.nameZh && (
+                                <div className="flex justify-between border-b border-gray-50 pb-2">
+                                    <span className="text-gray-500">Chinese Name (中文姓名)</span>
+                                    <span className="font-medium text-right">{formData.nameZh}</span>
+                                </div>
+                            )}
+                            {formData.dob && (
+                                <div className="flex justify-between border-b border-gray-50 pb-2">
+                                    <span className="text-gray-500">Date of Birth (出生日期)</span>
+                                    <span className="font-medium text-right">{formData.dob}</span>
+                                </div>
+                            )}
+                            {formData.mobile && (
+                                <div className="flex justify-between border-b border-gray-50 pb-2">
+                                    <span className="text-gray-500">Mobile Number (手機號碼)</span>
+                                    <span className="font-medium text-right">{formData.mobile}</span>
+                                </div>
+                            )}
+                            {formData.email && (
+                                <div className="flex justify-between border-b border-gray-50 pb-2">
+                                    <span className="text-gray-500">Email Address (電郵地址)</span>
+                                    <span className="font-medium text-right break-all">{formData.email}</span>
+                                </div>
+                            )}
+                            {formData.passportNumber && (
+                                <div className="flex justify-between border-b border-gray-50 pb-2">
+                                    <span className="text-gray-500">Passport No. (護照號碼)</span>
+                                    <span className="font-medium text-right">{formData.passportNumber}</span>
+                                </div>
+                            )}
+                            {formData.passportUrl && (
+                                <div className="flex justify-between pt-2">
+                                    <span className="text-gray-500">Passport Copy (護照副本)</span>
+                                    <span className="text-green-600 text-xs font-bold flex items-center">
+                                        <Check size={12} className="mr-1"/> Uploaded (已上傳)
+                                    </span>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* 航班與住宿 Flight & Accommodation */}
+                    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+                        <div className="bg-gray-50 px-4 py-3 border-b border-gray-200 font-bold text-gray-700 flex items-center">
+                            <Plane size={16} className="mr-2 text-red-600"/> Flight & Accommodation <span className="text-gray-500 font-normal ml-2">(航班與住宿)</span>
+                        </div>
+                        <div className="p-4 space-y-3 text-sm">
+                            <div className="flex justify-between border-b border-gray-50 pb-2">
                                 <span className="text-gray-500">Flight (航班)</span>
-                                <span className="font-medium text-right">{formData.flightOption === 'A' ? 'Group Flight' : 'Self Arrangement'}</span>
+                                <span className="font-medium text-right">{selectedFlight.labelEn} <span className="text-gray-400">({selectedFlight.labelZh})</span></span>
                             </div>
-                             <div className="flex justify-between border-b border-gray-50 pb-2">
-                                <span className="text-gray-500">Hotel (酒店)</span>
-                                <span className="font-medium text-right">{formData.hotelOption} ({formData.roomType})</span>
+                            {selectedHotel && (
+                                <div className="flex justify-between border-b border-gray-50 pb-2">
+                                    <span className="text-gray-500">Hotel (酒店)</span>
+                                    <span className="font-medium text-right">{selectedHotel.labelEn} <span className="text-gray-400">({selectedHotel.labelZh})</span></span>
+                                </div>
+                            )}
+                            <div className="flex justify-between border-b border-gray-50 pb-2">
+                                <span className="text-gray-500">Room Type (房間類型)</span>
+                                <span className="font-medium text-right">
+                                    {formData.roomType === 'Single' ? 'Single Room (單人房)' : 'Twin Share (雙人房)'}
+                                </span>
                             </div>
                             {formData.roomType === 'Twin' && (
                                 <div className="flex justify-between border-b border-gray-50 pb-2">
@@ -411,6 +596,79 @@ export const Registration: React.FC<RegistrationProps> = ({ onBack, onComplete, 
                             )}
                         </div>
                     </div>
+
+                    {/* 活動選擇 Event Selection */}
+                    {formData.selectedEventIds.length > 0 && (
+                        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+                            <div className="bg-gray-50 px-4 py-3 border-b border-gray-200 font-bold text-gray-700 flex items-center">
+                                <Calendar size={16} className="mr-2 text-purple-600"/> Event Selection <span className="text-gray-500 font-normal ml-2">(活動選擇)</span>
+                            </div>
+                            <div className="p-4 space-y-2 text-sm">
+                                {selectedEvents.map((event, idx) => (
+                                    <div key={idx} className="flex justify-between border-b border-gray-50 pb-2 last:border-0">
+                                        <span className="text-gray-500">Event {idx + 1} (活動 {idx + 1})</span>
+                                        <span className="font-medium text-right text-left ml-4">{event.fullLabel || event.title || event.id}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* 特殊需求 Special Requirements */}
+                    {(formData.dietaryRestrictions || formData.specialRemarks) && (
+                        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+                            <div className="bg-gray-50 px-4 py-3 border-b border-gray-200 font-bold text-gray-700 flex items-center">
+                                <AlertCircle size={16} className="mr-2 text-orange-600"/> Special Requirements <span className="text-gray-500 font-normal ml-2">(特殊需求)</span>
+                            </div>
+                            <div className="p-4 space-y-3 text-sm">
+                                {formData.dietaryRestrictions && selectedDietary && (
+                                    <div className="flex justify-between border-b border-gray-50 pb-2">
+                                        <span className="text-gray-500">Dietary Requirements (飲食需求)</span>
+                                        <span className="font-medium text-right">{selectedDietary.labelEn} <span className="text-gray-400">({selectedDietary.labelZh})</span></span>
+                                    </div>
+                                )}
+                                {formData.specialRemarks && (
+                                    <div className="pt-2">
+                                        <span className="text-gray-500 block mb-2">Special Remarks (特殊備註)</span>
+                                        <span className="font-medium text-gray-800 whitespace-pre-wrap block text-right">{formData.specialRemarks}</span>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* 登入信息 Login Information */}
+                    <div className="bg-blue-50 rounded-xl border border-blue-200 overflow-hidden shadow-sm">
+                        <div className="bg-blue-100 px-4 py-3 border-b border-blue-200 font-bold text-blue-800 flex items-center">
+                            <User size={16} className="mr-2"/> Login Information <span className="text-blue-600 font-normal ml-2">(登入資訊)</span>
+                        </div>
+                        <div className="p-4 space-y-3 text-sm">
+                            <div className="bg-white rounded-lg p-3 border border-blue-200">
+                                <div className="text-gray-700 mb-2 text-sm font-bold">
+                                    您的登入帳號 / Your Login Account:
+                                </div>
+                                <div className="font-bold text-blue-600 mb-3 text-base">
+                                    {formData.email}
+                                </div>
+                                <div className="text-gray-700 mb-2 text-sm font-bold">
+                                    初始密碼 / Initial Password:
+                                </div>
+                                <div className="font-bold text-blue-600 mb-3 text-base">
+                                    {formData.passportNumber && formData.passportNumber.length >= 6
+                                      ? formData.passportNumber.slice(-6)
+                                      : formData.passportNumber && formData.passportNumber.length > 0
+                                      ? formData.passportNumber.padStart(6, '0').slice(-6)
+                                      : '123456'}
+                                </div>
+                                <div className="text-gray-600 text-xs block mt-2 leading-relaxed">
+                                    💡 請使用護照號碼後6位作為首次登入密碼。登入後建議修改密碼。
+                                    <br />
+                                    💡 Please use the last 6 digits of your passport number as your initial password. We recommend changing your password after first login.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <p className="text-xs text-center text-gray-400 px-4">
                         By submitting, you confirm that all provided information is accurate. (提交即表示您確認所有提供的資料均準確無誤)
                     </p>
@@ -422,7 +680,21 @@ export const Registration: React.FC<RegistrationProps> = ({ onBack, onComplete, 
   };
 
   return (
-    <div className="min-h-screen bg-white flex flex-col">
+    <div className="min-h-screen bg-white flex flex-col relative">
+       {/* Loading Overlay */}
+       {isSubmitting && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+            <div className="bg-white rounded-2xl p-8 flex flex-col items-center space-y-4 shadow-2xl">
+              <Loader2 className="text-red-500 animate-spin" size={48} />
+              <div className="text-center">
+                <p className="text-lg font-bold text-gray-800">Submitting Registration...</p>
+                <p className="text-sm text-gray-500 mt-1">正在提交登記...</p>
+                <p className="text-xs text-gray-400 mt-2">Please do not close this page (請勿關閉此頁面)</p>
+              </div>
+            </div>
+          </div>
+       )}
+
        {toastMessage && (
           <div className={`fixed top-4 left-1/2 transform -translate-x-1/2 z-50 px-6 py-3 rounded-full shadow-xl flex items-center space-x-2 animate-fade-in ${toastMessage.type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'}`}>
               {toastMessage.type === 'error' ? <AlertCircle size={18} /> : <Check size={18} />}
@@ -460,7 +732,8 @@ export const Registration: React.FC<RegistrationProps> = ({ onBack, onComplete, 
        <div className="fixed bottom-0 left-0 right-0 p-6 bg-white border-t border-gray-100 flex justify-between items-center max-w-md mx-auto z-30">
            <button 
                 onClick={handlePrevious}
-                className={`px-6 py-3 rounded-xl text-sm font-bold text-gray-500 hover:bg-gray-50 transition-colors ${currentStep === 1 ? 'opacity-0 pointer-events-none' : ''}`}
+                disabled={isSubmitting}
+                className={`px-6 py-3 rounded-xl text-sm font-bold text-gray-500 hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${currentStep === 1 ? 'opacity-0 pointer-events-none' : ''}`}
             >
                 Back (返回)
            </button>
@@ -468,16 +741,25 @@ export const Registration: React.FC<RegistrationProps> = ({ onBack, onComplete, 
            {currentStep < steps.length ? (
                <button 
                     onClick={handleNext}
-                    className="px-8 py-3 bg-red-500 text-white rounded-xl text-sm font-bold shadow-lg shadow-red-200 hover:bg-red-600 transition-all active:scale-95"
+                    disabled={isSubmitting}
+                    className="px-8 py-3 bg-red-500 text-white rounded-xl text-sm font-bold shadow-lg shadow-red-200 hover:bg-red-600 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     Next Step (下一步)
                 </button>
            ) : (
                 <button 
                     onClick={handleSubmit}
-                    className="px-8 py-3 bg-green-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-green-200 hover:bg-green-700 transition-all active:scale-95"
+                    disabled={isSubmitting}
+                    className="px-8 py-3 bg-green-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-green-200 hover:bg-green-700 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
                 >
-                    Confirm & Submit (確認並提交)
+                    {isSubmitting ? (
+                        <>
+                            <Loader2 className="animate-spin" size={16} />
+                            <span>Submitting... (提交中...)</span>
+                        </>
+                    ) : (
+                        <span>Confirm & Submit (確認並提交)</span>
+                    )}
                 </button>
            )}
        </div>
